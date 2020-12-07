@@ -26,7 +26,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
-import android.util.Log
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
@@ -36,12 +35,12 @@ import androidx.navigation.NavController
 import androidx.navigation.findNavController
 import com.github.javiersantos.appupdater.AppUpdater
 import com.github.javiersantos.appupdater.enums.UpdateFrom
+import com.razorpay.Checkout
+import com.razorpay.PaymentResultListener
 import com.shabinder.spotiflyer.databinding.MainActivityBinding
 import com.shabinder.spotiflyer.networking.SpotifyService
 import com.shabinder.spotiflyer.networking.SpotifyServiceTokenRequest
-import com.shabinder.spotiflyer.utils.NetworkInterceptor
-import com.shabinder.spotiflyer.utils.createDirectories
-import com.shabinder.spotiflyer.utils.showMessage
+import com.shabinder.spotiflyer.utils.*
 import com.squareup.moshi.Moshi
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -56,8 +55,9 @@ import javax.inject.Inject
 /*
 * This is App's God Activity
 * */
+@SuppressLint("GoogleAppIndexingApiWarning")
 @AndroidEntryPoint
-class MainActivity : AppCompatActivity(){
+class MainActivity : AppCompatActivity(), PaymentResultListener {
     private var spotifyService : SpotifyService? = null
     val viewModelScope : CoroutineScope
         get() = sharedViewModel.viewModelScope
@@ -78,6 +78,7 @@ class MainActivity : AppCompatActivity(){
         navController = findNavController(R.id.navHostFragment)
         snackBarAnchor = binding.snackBarPosition
         authenticateSpotify()
+        Checkout.preload(applicationContext)
     }
 
     override fun onStart() {
@@ -155,13 +156,13 @@ class MainActivity : AppCompatActivity(){
 
     fun authenticateSpotify() {
         sharedViewModel.viewModelScope.launch {
-            Log.i("Spotify Authentication","Started")
+            log("Spotify Authentication","Started")
             val token = spotifyServiceTokenRequest.getToken()
             token.value?.let {
                 showMessage("Success: Spotify Token Acquired",isSuccess = true)
                 implementSpotifyService(it.access_token)
             }
-            Log.i("Spotify Token", token.value.toString())
+            log("Spotify Token", token.value.toString())
         }
     }
 
@@ -170,7 +171,7 @@ class MainActivity : AppCompatActivity(){
         if (intent?.action == Intent.ACTION_SEND) {
             if ("text/plain" == intent.type) {
                 intent.getStringExtra(Intent.EXTRA_TEXT)?.let {
-                    Log.i("Intent Received", it)
+                    log("Intent Received", it)
                     sharedViewModel.intentString.value = it
                 }
             }
@@ -187,23 +188,40 @@ class MainActivity : AppCompatActivity(){
     }
 
     private fun checkIfLatestVersion() {
-        val appUpdater = AppUpdater(this)
-            .showAppUpdated(false)//true:Show App is Update Dialog
-            .setUpdateFrom(UpdateFrom.XML)
-            .setUpdateXML("https://raw.githubusercontent.com/Shabinder/SpotiFlyer/master/app/src/main/res/xml/app_update.xml")
-            .setCancelable(false)
-            .setButtonDoNotShowAgain("Remind Later")
-            .setButtonDoNotShowAgainClickListener { dialog, _ -> dialog.dismiss()  }
-            .setButtonUpdateClickListener { _, _ ->
+        AppUpdater(this).run {
+            showAppUpdated(false)//true:Show App is Updated Dialog
+            setUpdateFrom(UpdateFrom.XML)
+            setUpdateXML("https://raw.githubusercontent.com/Shabinder/SpotiFlyer/master/app/src/main/res/xml/app_update.xml")
+            setCancelable(false)
+            setButtonDoNotShowAgain("Remind Later")
+            setButtonDoNotShowAgainClickListener { dialog, _ -> dialog.dismiss() }
+            setButtonUpdateClickListener { _, _ ->
                 val uri: Uri =
                     Uri.parse("http://github.com/Shabinder/SpotiFlyer/releases")
-                val intent = Intent(Intent.ACTION_VIEW, uri)
-                startActivity(intent)
+                startActivity(Intent(Intent.ACTION_VIEW, uri))
             }
-            .setButtonDismissClickListener { dialog, _ ->
+            setButtonDismissClickListener { dialog, _ ->
                 dialog.dismiss()
             }
-        appUpdater.start()
+            start()
+        }
+    }
+
+    override fun onPaymentError(errorCode: Int, response: String?) {
+        try{
+            showDialog("Payment Failed", "$response")
+        }catch (e: Exception){
+            log("Razorpay Payment","Exception in onPaymentSuccess $response")
+        }
+    }
+
+    override fun onPaymentSuccess(razorpayPaymentId: String?) {
+        try{
+            showDialog("Payment Successful", "ThankYou!")
+        }catch (e: Exception){
+            showMessage("Razorpay Payment, Error Occurred.")
+            log("Razorpay Payment","Exception in onPaymentSuccess, ${e.message}")
+        }
     }
 
     companion object{

@@ -19,7 +19,6 @@ package com.shabinder.spotiflyer.ui.spotify
 
 import android.annotation.SuppressLint
 import android.os.Bundle
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -45,10 +44,10 @@ class SpotifyFragment : TrackListFragment<SpotifyViewModel, SpotifyFragmentArgs>
     override val args: SpotifyFragmentArgs by navArgs()
     override lateinit var adapter: TrackListAdapter
     override var source: Source = Source.Spotify
+    private lateinit var link:String
+    private lateinit var type:String
     private val spotifyService:SpotifyService?
-    get() = sharedViewModel.spotifyService.value
-    lateinit var link:String
-    lateinit var type:String
+        get() = sharedViewModel.spotifyService.value
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreateView(
@@ -59,7 +58,7 @@ class SpotifyFragment : TrackListFragment<SpotifyViewModel, SpotifyFragmentArgs>
         initializeAll()
 
         var spotifyLink = "https://" + args.link.substringAfterLast("https://").substringBefore(" ").trim()
-        Log.i("Spotify Fragment Link", spotifyLink)
+        log("Spotify Fragment Link", spotifyLink)
         viewModelScope.launch(Dispatchers.IO) {
 
             /*
@@ -68,14 +67,14 @@ class SpotifyFragment : TrackListFragment<SpotifyViewModel, SpotifyFragmentArgs>
             * */
             if (!spotifyLink.contains("open.spotify")) {
                 val resolvedLink = viewModel.resolveLink(spotifyLink)
-                Log.d("Spotify Resolved Link", resolvedLink)
+                log("Spotify Resolved Link", resolvedLink)
                 spotifyLink = resolvedLink
             }
 
             link = spotifyLink.substringAfterLast('/', "Error").substringBefore('?')
             type = spotifyLink.substringBeforeLast('/', "Error").substringAfterLast('/')
 
-            Log.i("Spotify Fragment", "$type : $link")
+            log("Spotify Fragment", "$type : $link")
 
             if (sharedViewModel.spotifyService.value == null) {//Authentication pending!!
                 if (isOnline()) mainActivity.authenticateSpotify()
@@ -95,7 +94,7 @@ class SpotifyFragment : TrackListFragment<SpotifyViewModel, SpotifyFragmentArgs>
 
                         binding.btnDownloadAll.setOnClickListener {
                             if (!isOnline()) {
-                                showNoConnectionAlert()
+                                showDialog()
                                 return@setOnClickListener
                             }
                             binding.btnDownloadAll.gone()
